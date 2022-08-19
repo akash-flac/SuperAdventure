@@ -18,5 +18,23 @@ public partial class SuperAdventure : Form
         lblLevel.Text = _player.Level.ToString();
     }
 
-    
+    private void button6_Click(object sender, EventArgs e)
+    {
+
+    }
+
+    private void btnusePotion_Click(object sender, EventArgs e)
+    {
+
+    }
+
+    private void label5_Click(object sender, EventArgs e)
+    {
+
+    }
+
+    private void richTextBox1_TextChanged(object sender, EventArgs e)
+    {
+
+    }
 }
