@@ -3,20 +3,14 @@ namespace SuperAdventure1;
 
 public partial class SuperAdventure : Form
 {
-    private Player _player; 
-     
+    private Player _player;
+
     public SuperAdventure()
     {
         InitializeComponent();
 
-        _player = new Player
-        {
-            CurrentHitPoints = 10,
-            MaximumHitPoints = 10,
-            Gold = 20,
-            ExperiencePoints = 0,
-            Level = 1
-        };
+        Location location = new(1, "Home", "This is your house.");
+        _player = new Player(10, 10, 20, 0, 1); 
 
         lblHitPoints.Text = _player.CurrentHitPoints.ToString();
         lblGold.Text = _player.Gold.ToString();
