@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 namespace Engine
 {
-    public class LootIte
+    public class LootItem
     {
         public Item Details { get; set; }
         public int DropPercentage { get; set; }
