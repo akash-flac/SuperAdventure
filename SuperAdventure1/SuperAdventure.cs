@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Engine;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.ToolBar;
 
 namespace SuperAdventure
 {
@@ -49,32 +50,13 @@ namespace SuperAdventure
 
         private void MoveTo(Location newLocation)
         {
-            //Does the location have any required items
-
-            if (newLocation.ItemRequiredToEnter != null)
-               {
-                // See if the player has the required item in their inventory
-
-                bool playerHasRequiredItem = false;
-                foreach (InventoryItem ii in _player.Inventory)
-                {
-                    if (ii.Details.ID == newLocation.ItemRequiredToEnter.ID)
-                    {
-                        // We found the required item
-                        playerHasRequiredItem = true;
-                        break;
-                        // Exit out of the foreach loop
-                    }
-                }
-                if (!playerHasRequiredItem)
-                {
-                    // We didn't find the required item in their inventory, so display a message and stop trying to move
-
-                    rtbMessages.Text += "You must have a " +
-                     newLocation.ItemRequiredToEnter.Name +
-                     " to enter this location." + Environment.NewLine;
-                    return;
-                }
+            // Does the location have any required items
+            if (!_player.HasRequiredItemToEnterThisLocation(newLocation))
+            {
+                rtbMessages.Text += "You must have a " +
+                newLocation.ItemRequiredToEnter.Name +
+                " to enter this location." + Environment.NewLine;
+                return;
             }
             // Update the player's current location
 
@@ -96,23 +78,15 @@ namespace SuperAdventure
             // Update Hit Points in UI
             lblHitPoints.Text = _player.CurrentHitPoints.ToString();
 
-              // Does the location have a quest?
+            // Does the location have a quest?
             if (newLocation.QuestAvailableHere != null)
             {
                 // See if the player already has the quest, and if they've completed it
-                bool playerAlreadyHasQuest = false;
-                bool playerAlreadyCompletedQuest = false;
-                foreach (PlayerQuest playerQuest in _player.Quests)
-                {
-                    if (playerQuest.Details.ID == newLocation.QuestAvailableHere.ID)
-                    {
-                        playerAlreadyHasQuest = true;
-                        if (playerQuest.IsCompleted)
-                        {
-                            playerAlreadyCompletedQuest = true;
-                        }
-                    }
-                }
+
+                bool playerAlreadyHasQuest =
+                _player.HasThisQuest(newLocation.QuestAvailableHere);
+                bool playerAlreadyCompletedQuest =
+                 _player.CompletedThisQuest(newLocation.QuestAvailableHere);
 
                 // See if the player already has the quest
 
@@ -124,52 +98,9 @@ namespace SuperAdventure
                     if (!playerAlreadyCompletedQuest)
                     {
                         // See if the player has all the items needed to complete the quest
+                        bool playerHasAllItemsToCompleteQuest =
+                         _player.HasAllQuestCompletionItems(newLocation.QuestAvailableHere);
 
-                        bool playerHasAllItemsToCompleteQuest = true;
-
-                        foreach (QuestCompletionItem qci in
-                         newLocation.QuestAvailableHere.QuestCompletionItems)
-                        {
-                            bool foundItemInPlayersInventory = false;
-
-                            // Check each item in the player's inventory, to see if they have it, and enough of it
-                            
-                        foreach (InventoryItem ii in _player.Inventory)
-                            {
-                                // The player has this item in their inventory
-                                if (ii.Details.ID == qci.Details.ID)
-                                { foundItemInPlayersInventory = true;
-
-                                    if (ii.Quantity < qci.Quantity)
-                                    {
-                                        // The player does not have enough of this item to complete the quest
-
-                                        playerHasAllItemsToCompleteQuest = false;
-
-                                        // There is no reason to continue checking  for the other quest completion items
-                                        break;
-
-                                    }
-                                    
-                                    // We found the item, so don't check the rest of the player's inventory
-
-                                    break;
-                                }
-                            }
-                        
-                        // If we didn't find the required item, set our variable and stop looking for other items
-
-                            if (!foundItemInPlayersInventory)
-                                {
-                                // The player does not have this item in their inventory
-
-                                    playerHasAllItemsToCompleteQuest = false;
-
-                                // There is no reason to continue checking for the other quest completion items
-
-                                break;
-                                }
-                        }
                         // The player has all items required to complete the quest
 
                         if (playerHasAllItemsToCompleteQuest)
@@ -179,21 +110,10 @@ namespace SuperAdventure
                             rtbMessages.Text += "You complete the " +
                              newLocation.QuestAvailableHere.Name +
                              " quest." + Environment.NewLine;
-                            // Remove quest items from inventory
-                            foreach (QuestCompletionItem qci in
-                             newLocation.QuestAvailableHere.QuestCompletionItems)
-                            {
-                                foreach (InventoryItem ii in _player.Inventory)
-                                {
-                                    if (ii.Details.ID == qci.Details.ID)
-                                    {// Subtract the quantity from the player's 
-                                        //inventory that was needed to complete the quest
-                                        ii.Quantity -= qci.Quantity;
-                                        break;
 
-                                    }
-                                }
-                            }
+                            // Remove quest items from inventory
+                            _player.RemoveQuestCompletionItems(newLocation.QuestAvailableHere);
+
                             //Give Quest Rewards
                             rtbMessages.Text += "You receive: " + Environment.NewLine;
                             rtbMessages.Text +=
@@ -209,47 +129,18 @@ namespace SuperAdventure
                             _player.Gold += newLocation.QuestAvailableHere.RewardGold;
 
                             // Add the reward item to the player's inventory
-
-                            bool addedItemToPlayerInventory = false;
-                            foreach (InventoryItem ii in _player.Inventory)
-                            {
-                                if (ii.Details.ID ==
-                             newLocation.QuestAvailableHere.RewardItem.ID)
-                                {
-                                    // They have the item in their inventory, so increase the quantity by one
-                                 
-                                    ii.Quantity++;
-                                    addedItemToPlayerInventory = true;
-                                    break;
-                                }
-                            }
-                            
-                            // They didn't have the item, so add it to their inventorywith a quantity of 1
-                            
-                            if (!addedItemToPlayerInventory)
-                            {
-                                _player.Inventory.Add(new InventoryItem(newLocation.QuestAvailableHere.RewardItem, 1));
-
-                            }
+                            _player.AddItemToInventory(newLocation.QuestAvailableHere.RewardItem);
 
                             // Mark the quest as completed
-                            // Find the quest in the player's quest list
-                            foreach (PlayerQuest pq in _player.Quests)
-                            {
-                                if (pq.Details.ID == newLocation.QuestAvailableHere.ID)
-                                {// Mark it as completed
-                                    pq.IsCompleted = true;
-                                    break;
-                                }
-                            }
+                            _player.MarkQuestCompleted(newLocation.QuestAvailableHere);
                         }
                     }
                 }
                 else
-                {// The player does not already have the quest
+                {
+                    // The player does not already have the quest
+                    // Display the messages
 
-                 // Display the messages
-                 
                     rtbMessages.Text += "You receive the " +
                      newLocation.QuestAvailableHere.Name +
                      " quest." + Environment.NewLine;
@@ -273,7 +164,7 @@ namespace SuperAdventure
                     }
                     rtbMessages.Text += Environment.NewLine;
                     // Add the quest to the player's quest list
-                    player.Quests.Add(new PlayerQuest(newLocation.QuestAvailableHere));
+                    _player.Quests.Add(new PlayerQuest(newLocation.QuestAvailableHere));
 
                 }
             }
@@ -309,8 +200,281 @@ namespace SuperAdventure
                 btnUseWeapon.Visible = false;
                 btnUsePotion.Visible = false;
             }
-            
+
             // Refresh player's inventory list
+            UpdateInventoryListInUI();
+            // Refresh player's quest list
+            UpdateQuestListInUI();
+            // Refresh player's weapons combobox
+            UpdateWeaponListInUI();
+            // Refresh player's potions combobox
+            UpdatePotionListInUI();
+
+
+            void InitializeComponent()
+            {
+                this.label1 = new System.Windows.Forms.Label();
+                this.label2 = new System.Windows.Forms.Label();
+                this.label3 = new System.Windows.Forms.Label();
+                this.label4 = new System.Windows.Forms.Label();
+                this.lblHitPoints = new System.Windows.Forms.Label();
+                this.lblGold = new System.Windows.Forms.Label();
+                this.lblExperience = new System.Windows.Forms.Label();
+                this.lblLevel = new System.Windows.Forms.Label();
+                this.label9 = new System.Windows.Forms.Label();
+                this.cboWeapons = new System.Windows.Forms.ComboBox();
+                this.cboPotions = new System.Windows.Forms.ComboBox();
+                this.btnUseWeapon = new System.Windows.Forms.Button();
+                this.btnUsePotion = new System.Windows.Forms.Button();
+                this.btnNorth = new System.Windows.Forms.Button();
+                this.btnEast = new System.Windows.Forms.Button();
+                this.btnSouth = new System.Windows.Forms.Button();
+                this.btnWest = new System.Windows.Forms.Button();
+                this.rtbLocation = new System.Windows.Forms.RichTextBox();
+                this.rtbMessages = new System.Windows.Forms.RichTextBox();
+                this.dgvInventory = new System.Windows.Forms.DataGridView();
+                this.dgvQuests = new System.Windows.Forms.DataGridView();
+                ((System.ComponentModel.ISupportInitialize)(this.dgvInventory)).BeginInit();
+                ((System.ComponentModel.ISupportInitialize)(this.dgvQuests)).BeginInit();
+                this.SuspendLayout();
+                // 
+                // label1
+                // 
+                this.label1.AutoSize = true;
+                this.label1.Location = new System.Drawing.Point(18, 20);
+                this.label1.Name = "label1";
+                this.label1.Size = new System.Drawing.Size(79, 20);
+                this.label1.TabIndex = 0;
+                this.label1.Text = "Hit Points :";
+                // 
+                // label2
+                // 
+                this.label2.AutoSize = true;
+                this.label2.Location = new System.Drawing.Point(18, 46);
+                this.label2.Name = "label2";
+                this.label2.Size = new System.Drawing.Size(48, 20);
+                this.label2.TabIndex = 1;
+                this.label2.Text = "Gold :";
+                // 
+                // label3
+                // 
+                this.label3.AutoSize = true;
+                this.label3.Location = new System.Drawing.Point(18, 74);
+                this.label3.Name = "label3";
+                this.label3.Size = new System.Drawing.Size(88, 20);
+                this.label3.TabIndex = 2;
+                this.label3.Text = "Experience :";
+                // 
+                // label4
+                // 
+                this.label4.AutoSize = true;
+                this.label4.Location = new System.Drawing.Point(18, 100);
+                this.label4.Name = "label4";
+                this.label4.Size = new System.Drawing.Size(50, 20);
+                this.label4.TabIndex = 3;
+                this.label4.Text = "Level :";
+                // 
+                // lblHitPoints
+                // 
+                this.lblHitPoints.AutoSize = true;
+                this.lblHitPoints.Location = new System.Drawing.Point(110, 19);
+                this.lblHitPoints.Name = "lblHitPoints";
+                this.lblHitPoints.Size = new System.Drawing.Size(50, 20);
+                this.lblHitPoints.TabIndex = 4;
+                this.lblHitPoints.Text = "label5";
+                // 
+                // lblGold
+                // 
+                this.lblGold.AutoSize = true;
+                this.lblGold.Location = new System.Drawing.Point(110, 45);
+                this.lblGold.Name = "lblGold";
+                this.lblGold.Size = new System.Drawing.Size(50, 20);
+                this.lblGold.TabIndex = 5;
+                this.lblGold.Text = "label6";
+                // 
+                // lblExperience
+                // 
+                this.lblExperience.AutoSize = true;
+                this.lblExperience.Location = new System.Drawing.Point(110, 73);
+                this.lblExperience.Name = "lblExperience";
+                this.lblExperience.Size = new System.Drawing.Size(50, 20);
+                this.lblExperience.TabIndex = 6;
+                this.lblExperience.Text = "label7";
+                // 
+                // lblLevel
+                // 
+                this.lblLevel.AutoSize = true;
+                this.lblLevel.Location = new System.Drawing.Point(110, 99);
+                this.lblLevel.Name = "lblLevel";
+                this.lblLevel.Size = new System.Drawing.Size(50, 20);
+                this.lblLevel.TabIndex = 7;
+                this.lblLevel.Text = "label8";
+                // 
+                // label9
+                // 
+                this.label9.AutoSize = true;
+                this.label9.Location = new System.Drawing.Point(617, 531);
+                this.label9.Name = "label9";
+                this.label9.Size = new System.Drawing.Size(96, 20);
+                this.label9.TabIndex = 8;
+                this.label9.Text = "Select Action";
+                // 
+                // cboWeapons
+                // 
+                this.cboWeapons.FormattingEnabled = true;
+                this.cboWeapons.Location = new System.Drawing.Point(369, 559);
+                this.cboWeapons.Name = "cboWeapons";
+                this.cboWeapons.Size = new System.Drawing.Size(121, 28);
+                this.cboWeapons.TabIndex = 9;
+                // 
+                // cboPotions
+                // 
+                this.cboPotions.FormattingEnabled = true;
+                this.cboPotions.Location = new System.Drawing.Point(369, 593);
+                this.cboPotions.Name = "cboPotions";
+                this.cboPotions.Size = new System.Drawing.Size(121, 28);
+                this.cboPotions.TabIndex = 10;
+                // 
+                // btnUseWeapon
+                // 
+                this.btnUseWeapon.Location = new System.Drawing.Point(620, 559);
+                this.btnUseWeapon.Name = "btnUseWeapon";
+                this.btnUseWeapon.Size = new System.Drawing.Size(75, 28);
+                this.btnUseWeapon.TabIndex = 11;
+                this.btnUseWeapon.Text = "Use";
+                this.btnUseWeapon.UseVisualStyleBackColor = true;
+                // 
+                // btnUsePotion
+                // 
+                this.btnUsePotion.Location = new System.Drawing.Point(620, 593);
+                this.btnUsePotion.Name = "btnUsePotion";
+                this.btnUsePotion.Size = new System.Drawing.Size(75, 28);
+                this.btnUsePotion.TabIndex = 12;
+                this.btnUsePotion.Text = "Use";
+                this.btnUsePotion.UseVisualStyleBackColor = true;
+                // 
+                // btnNorth
+                // 
+                this.btnNorth.Location = new System.Drawing.Point(493, 433);
+                this.btnNorth.Name = "btnNorth";
+                this.btnNorth.Size = new System.Drawing.Size(76, 33);
+                this.btnNorth.TabIndex = 13;
+                this.btnNorth.Text = "North";
+                this.btnNorth.UseVisualStyleBackColor = true;
+                // 
+                // btnEast
+                // 
+                this.btnEast.Location = new System.Drawing.Point(573, 457);
+                this.btnEast.Name = "btnEast";
+                this.btnEast.Size = new System.Drawing.Size(76, 33);
+                this.btnEast.TabIndex = 14;
+                this.btnEast.Text = "East";
+                this.btnEast.UseVisualStyleBackColor = true;
+                // 
+                // btnSouth
+                // 
+                this.btnSouth.Location = new System.Drawing.Point(493, 487);
+                this.btnSouth.Name = "btnSouth";
+                this.btnSouth.Size = new System.Drawing.Size(76, 33);
+                this.btnSouth.TabIndex = 15;
+                this.btnSouth.Text = "South";
+                this.btnSouth.UseVisualStyleBackColor = true;
+                // 
+                // btnWest
+                // 
+                this.btnWest.Location = new System.Drawing.Point(412, 457);
+                this.btnWest.Name = "btnWest";
+                this.btnWest.Size = new System.Drawing.Size(76, 33);
+                this.btnWest.TabIndex = 16;
+                this.btnWest.Text = "West";
+                this.btnWest.UseVisualStyleBackColor = true;
+                // 
+                // rtbLocation
+                // 
+                this.rtbLocation.Location = new System.Drawing.Point(347, 19);
+                this.rtbLocation.Name = "rtbLocation";
+                this.rtbLocation.ReadOnly = true;
+                this.rtbLocation.Size = new System.Drawing.Size(360, 105);
+                this.rtbLocation.TabIndex = 17;
+                this.rtbLocation.Text = "";
+                // 
+                // rtbMessages
+                // 
+                this.rtbMessages.Location = new System.Drawing.Point(347, 130);
+                this.rtbMessages.Name = "rtbMessages";
+                this.rtbMessages.ReadOnly = true;
+                this.rtbMessages.Size = new System.Drawing.Size(360, 286);
+                this.rtbMessages.TabIndex = 18;
+                this.rtbMessages.Text = "";
+                // 
+                // dgvInventory
+                // 
+                this.dgvInventory.AllowUserToAddRows = false;
+                this.dgvInventory.AllowUserToDeleteRows = false;
+                this.dgvInventory.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+                this.dgvInventory.EditMode = System.Windows.Forms.DataGridViewEditMode.EditProgrammatically;
+                this.dgvInventory.Enabled = false;
+                this.dgvInventory.Location = new System.Drawing.Point(16, 130);
+                this.dgvInventory.MultiSelect = false;
+                this.dgvInventory.Name = "dgvInventory";
+                this.dgvInventory.ReadOnly = true;
+                this.dgvInventory.RowHeadersWidth = 51;
+                this.dgvInventory.RowTemplate.Height = 29;
+                this.dgvInventory.Size = new System.Drawing.Size(312, 309);
+                this.dgvInventory.TabIndex = 19;
+                // 
+                // dgvQuests
+                // 
+                this.dgvQuests.AllowUserToAddRows = false;
+                this.dgvQuests.AllowUserToDeleteRows = false;
+                this.dgvQuests.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+                this.dgvQuests.EditMode = System.Windows.Forms.DataGridViewEditMode.EditProgrammatically;
+                this.dgvQuests.Enabled = false;
+                this.dgvQuests.Location = new System.Drawing.Point(16, 446);
+                this.dgvQuests.MultiSelect = false;
+                this.dgvQuests.Name = "dgvQuests";
+                this.dgvQuests.ReadOnly = true;
+                this.dgvQuests.RowHeadersWidth = 51;
+                this.dgvQuests.RowTemplate.Height = 29;
+                this.dgvQuests.Size = new System.Drawing.Size(312, 189);
+                this.dgvQuests.TabIndex = 20;
+                // 
+                // SuperAdventure
+                // 
+                this.ClientSize = new System.Drawing.Size(1105, 640);
+                this.Controls.Add(this.dgvQuests);
+                this.Controls.Add(this.dgvInventory);
+                this.Controls.Add(this.rtbMessages);
+                this.Controls.Add(this.rtbLocation);
+                this.Controls.Add(this.btnWest);
+                this.Controls.Add(this.btnSouth);
+                this.Controls.Add(this.btnEast);
+                this.Controls.Add(this.btnNorth);
+                this.Controls.Add(this.btnUsePotion);
+                this.Controls.Add(this.btnUseWeapon);
+                this.Controls.Add(this.cboPotions);
+                this.Controls.Add(this.cboWeapons);
+                this.Controls.Add(this.label9);
+                this.Controls.Add(this.lblLevel);
+                this.Controls.Add(this.lblExperience);
+                this.Controls.Add(this.lblGold);
+                this.Controls.Add(this.lblHitPoints);
+                this.Controls.Add(this.label4);
+                this.Controls.Add(this.label3);
+                this.Controls.Add(this.label2);
+                this.Controls.Add(this.label1);
+                this.Name = "SuperAdventure";
+                ((System.ComponentModel.ISupportInitialize)(this.dgvInventory)).EndInit();
+                ((System.ComponentModel.ISupportInitialize)(this.dgvQuests)).EndInit();
+                this.ResumeLayout(false);
+                this.PerformLayout();
+
+            }
+
+        }
+
+        private void UpdateInventoryListInUI()
+        {
             dgvInventory.RowHeadersVisible = false;
             dgvInventory.ColumnCount = 2;
             dgvInventory.Columns[0].Name = "Name";
@@ -321,12 +485,15 @@ namespace SuperAdventure
             {
                 if (inventoryItem.Quantity > 0)
                 {
-                    dgvInventory.Rows.Add(new[] { inventoryItem.Details.Name,
-                                                  inventoryItem.Quantity.ToString() });
+                    dgvInventory.Rows.Add(new[] {
+                    inventoryItem.Details.Name,
+                    inventoryItem.Quantity.ToString() });
                 }
             }
+        }
 
-            // Refresh player's quest list
+        private void UpdateQuestListInUI()
+        {
             dgvQuests.RowHeadersVisible = false;
             dgvQuests.ColumnCount = 2;
             dgvQuests.Columns[0].Name = "Name";
@@ -335,11 +502,15 @@ namespace SuperAdventure
             dgvQuests.Rows.Clear();
             foreach (PlayerQuest playerQuest in _player.Quests)
             {
-                dgvQuests.Rows.Add(new[] { playerQuest.Details.Name,
-                                           playerQuest.IsCompleted.ToString() });
+                dgvQuests.Rows.Add(new[] { playerQuest.Details.Name, playerQuest.IsCompleted.ToString() });
+
+
             }
-            
-            // Refresh player's weapons combobox
+        }
+
+
+        private void UpdateWeaponListInUI()
+        {
             List<Weapon> weapons = new List<Weapon>();
             foreach (InventoryItem inventoryItem in _player.Inventory)
             {
@@ -352,8 +523,9 @@ namespace SuperAdventure
                 }
             }
             if (weapons.Count == 0)
-            {// The player doesn't have any weapons, so hide the weapon combobox and the "Use" button
-
+            {
+                // The player doesn't have any weapons, so hide the weapon 
+                //combobox and "Use" button
                 cboWeapons.Visible = false;
                 btnUseWeapon.Visible = false;
             }
@@ -364,23 +536,26 @@ namespace SuperAdventure
                 cboWeapons.ValueMember = "ID";
                 cboWeapons.SelectedIndex = 0;
             }
+        }
 
-            // Refresh player's potions combobox
-            List<HealingPotion> healingPotions = new List<HealingPotion>(); 
-                
+        private void UpdatePotionListInUI()
+        {
+            List<HealingPotion> healingPotions = new List<HealingPotion>();
             foreach (InventoryItem inventoryItem in _player.Inventory)
             {
                 if (inventoryItem.Details is HealingPotion)
                 {
                     if (inventoryItem.Quantity > 0)
                     {
-                        healingPotions.Add((HealingPotion)inventoryItem.Details);
+                        healingPotions.Add(
+                        (HealingPotion)inventoryItem.Details);
                     }
                 }
             }
-            if(healingPotions.Count == 0)
+            if (healingPotions.Count == 0)
             {
-                // The player doesn't have any potions, so hide the potion  the "Use" button
+                // The player doesn't have any potions, so hide the potion 
+                //combobox and "Use" button
                 cboPotions.Visible = false;
                 btnUsePotion.Visible = false;
             }
@@ -392,12 +567,28 @@ namespace SuperAdventure
                 cboPotions.SelectedIndex = 0;
             }
         }
-        private void btnUseWeapon_Click(object sender, EventArgs e)
-        {
-        }
-        private void btnUsePotion_Click(object sender, EventArgs e)
-        {
-        }
+
+        private Label label1;
+        private Label label2;
+        private Label label3;
+        private Label label4;
+        private Label lblHitPoints;
+        private Label lblGold;
+        private Label lblExperience;
+        private Label lblLevel;
+        private Label label9;
+        private System.Windows.Forms.ComboBox cboWeapons;
+        private System.Windows.Forms.ComboBox cboPotions;
+        private System.Windows.Forms.Button btnUseWeapon;
+        private System.Windows.Forms.Button btnUsePotion;
+        private System.Windows.Forms.Button btnNorth;
+        private System.Windows.Forms.Button btnEast;
+        private System.Windows.Forms.Button btnSouth;
+        private System.Windows.Forms.Button btnWest;
+        private RichTextBox rtbLocation;
+        private RichTextBox rtbMessages;
+        private DataGridView dgvInventory;
+        private DataGridView dgvQuests;
 
         private void InitializeComponent()
         {
@@ -412,8 +603,18 @@ namespace SuperAdventure
             this.label9 = new System.Windows.Forms.Label();
             this.cboWeapons = new System.Windows.Forms.ComboBox();
             this.cboPotions = new System.Windows.Forms.ComboBox();
-            this.button1 = new System.Windows.Forms.Button();
-            this.button2 = new System.Windows.Forms.Button();
+            this.btnUseWeapon = new System.Windows.Forms.Button();
+            this.btnUsePotion = new System.Windows.Forms.Button();
+            this.btnNorth = new System.Windows.Forms.Button();
+            this.btnEast = new System.Windows.Forms.Button();
+            this.btnSouth = new System.Windows.Forms.Button();
+            this.btnWest = new System.Windows.Forms.Button();
+            this.rtbLocation = new System.Windows.Forms.RichTextBox();
+            this.rtbMessages = new System.Windows.Forms.RichTextBox();
+            this.dgvInventory = new System.Windows.Forms.DataGridView();
+            this.dgvQuests = new System.Windows.Forms.DataGridView();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvInventory)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvQuests)).BeginInit();
             this.SuspendLayout();
             // 
             // label1
@@ -421,7 +622,7 @@ namespace SuperAdventure
             this.label1.AutoSize = true;
             this.label1.Location = new System.Drawing.Point(18, 20);
             this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(65, 15);
+            this.label1.Size = new System.Drawing.Size(79, 20);
             this.label1.TabIndex = 0;
             this.label1.Text = "Hit Points :";
             // 
@@ -430,7 +631,7 @@ namespace SuperAdventure
             this.label2.AutoSize = true;
             this.label2.Location = new System.Drawing.Point(18, 46);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(38, 15);
+            this.label2.Size = new System.Drawing.Size(48, 20);
             this.label2.TabIndex = 1;
             this.label2.Text = "Gold :";
             // 
@@ -439,7 +640,7 @@ namespace SuperAdventure
             this.label3.AutoSize = true;
             this.label3.Location = new System.Drawing.Point(18, 74);
             this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(70, 15);
+            this.label3.Size = new System.Drawing.Size(88, 20);
             this.label3.TabIndex = 2;
             this.label3.Text = "Experience :";
             // 
@@ -448,7 +649,7 @@ namespace SuperAdventure
             this.label4.AutoSize = true;
             this.label4.Location = new System.Drawing.Point(18, 100);
             this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(40, 15);
+            this.label4.Size = new System.Drawing.Size(50, 20);
             this.label4.TabIndex = 3;
             this.label4.Text = "Level :";
             // 
@@ -457,7 +658,7 @@ namespace SuperAdventure
             this.lblHitPoints.AutoSize = true;
             this.lblHitPoints.Location = new System.Drawing.Point(110, 19);
             this.lblHitPoints.Name = "lblHitPoints";
-            this.lblHitPoints.Size = new System.Drawing.Size(38, 15);
+            this.lblHitPoints.Size = new System.Drawing.Size(50, 20);
             this.lblHitPoints.TabIndex = 4;
             this.lblHitPoints.Text = "label5";
             // 
@@ -466,7 +667,7 @@ namespace SuperAdventure
             this.lblGold.AutoSize = true;
             this.lblGold.Location = new System.Drawing.Point(110, 45);
             this.lblGold.Name = "lblGold";
-            this.lblGold.Size = new System.Drawing.Size(38, 15);
+            this.lblGold.Size = new System.Drawing.Size(50, 20);
             this.lblGold.TabIndex = 5;
             this.lblGold.Text = "label6";
             // 
@@ -475,7 +676,7 @@ namespace SuperAdventure
             this.lblExperience.AutoSize = true;
             this.lblExperience.Location = new System.Drawing.Point(110, 73);
             this.lblExperience.Name = "lblExperience";
-            this.lblExperience.Size = new System.Drawing.Size(38, 15);
+            this.lblExperience.Size = new System.Drawing.Size(50, 20);
             this.lblExperience.TabIndex = 6;
             this.lblExperience.Text = "label7";
             // 
@@ -484,7 +685,7 @@ namespace SuperAdventure
             this.lblLevel.AutoSize = true;
             this.lblLevel.Location = new System.Drawing.Point(110, 99);
             this.lblLevel.Name = "lblLevel";
-            this.lblLevel.Size = new System.Drawing.Size(38, 15);
+            this.lblLevel.Size = new System.Drawing.Size(50, 20);
             this.lblLevel.TabIndex = 7;
             this.lblLevel.Text = "label8";
             // 
@@ -493,7 +694,7 @@ namespace SuperAdventure
             this.label9.AutoSize = true;
             this.label9.Location = new System.Drawing.Point(617, 531);
             this.label9.Name = "label9";
-            this.label9.Size = new System.Drawing.Size(76, 15);
+            this.label9.Size = new System.Drawing.Size(96, 20);
             this.label9.TabIndex = 8;
             this.label9.Text = "Select Action";
             // 
@@ -502,7 +703,7 @@ namespace SuperAdventure
             this.cboWeapons.FormattingEnabled = true;
             this.cboWeapons.Location = new System.Drawing.Point(369, 559);
             this.cboWeapons.Name = "cboWeapons";
-            this.cboWeapons.Size = new System.Drawing.Size(121, 23);
+            this.cboWeapons.Size = new System.Drawing.Size(121, 28);
             this.cboWeapons.TabIndex = 9;
             // 
             // cboPotions
@@ -510,32 +711,128 @@ namespace SuperAdventure
             this.cboPotions.FormattingEnabled = true;
             this.cboPotions.Location = new System.Drawing.Point(369, 593);
             this.cboPotions.Name = "cboPotions";
-            this.cboPotions.Size = new System.Drawing.Size(121, 23);
+            this.cboPotions.Size = new System.Drawing.Size(121, 28);
             this.cboPotions.TabIndex = 10;
             // 
-            // button1
+            // btnUseWeapon
             // 
-            this.button1.Location = new System.Drawing.Point(599, 225);
-            this.button1.Name = "button1";
-            this.button1.Size = new System.Drawing.Size(75, 23);
-            this.button1.TabIndex = 11;
-            this.button1.Text = "button1";
-            this.button1.UseVisualStyleBackColor = true;
+            this.btnUseWeapon.Location = new System.Drawing.Point(620, 559);
+            this.btnUseWeapon.Name = "btnUseWeapon";
+            this.btnUseWeapon.Size = new System.Drawing.Size(75, 28);
+            this.btnUseWeapon.TabIndex = 11;
+            this.btnUseWeapon.Text = "Use";
+            this.btnUseWeapon.UseVisualStyleBackColor = true;
+            this.btnUseWeapon.Click += new System.EventHandler(this.btnUseWeapon_Click);
             // 
-            // button2
+            // btnUsePotion
             // 
-            this.button2.Location = new System.Drawing.Point(416, 172);
-            this.button2.Name = "button2";
-            this.button2.Size = new System.Drawing.Size(75, 23);
-            this.button2.TabIndex = 12;
-            this.button2.Text = "button2";
-            this.button2.UseVisualStyleBackColor = true;
+            this.btnUsePotion.Location = new System.Drawing.Point(620, 593);
+            this.btnUsePotion.Name = "btnUsePotion";
+            this.btnUsePotion.Size = new System.Drawing.Size(75, 28);
+            this.btnUsePotion.TabIndex = 12;
+            this.btnUsePotion.Text = "Use";
+            this.btnUsePotion.UseVisualStyleBackColor = true;
+            this.btnUsePotion.Click += new System.EventHandler(this.btnUsePotion_Click);
+            // 
+            // btnNorth
+            // 
+            this.btnNorth.Location = new System.Drawing.Point(493, 433);
+            this.btnNorth.Name = "btnNorth";
+            this.btnNorth.Size = new System.Drawing.Size(76, 33);
+            this.btnNorth.TabIndex = 13;
+            this.btnNorth.Text = "North";
+            this.btnNorth.UseVisualStyleBackColor = true;
+            // 
+            // btnEast
+            // 
+            this.btnEast.Location = new System.Drawing.Point(573, 457);
+            this.btnEast.Name = "btnEast";
+            this.btnEast.Size = new System.Drawing.Size(76, 33);
+            this.btnEast.TabIndex = 14;
+            this.btnEast.Text = "East";
+            this.btnEast.UseVisualStyleBackColor = true;
+            // 
+            // btnSouth
+            // 
+            this.btnSouth.Location = new System.Drawing.Point(493, 487);
+            this.btnSouth.Name = "btnSouth";
+            this.btnSouth.Size = new System.Drawing.Size(76, 33);
+            this.btnSouth.TabIndex = 15;
+            this.btnSouth.Text = "South";
+            this.btnSouth.UseVisualStyleBackColor = true;
+            // 
+            // btnWest
+            // 
+            this.btnWest.Location = new System.Drawing.Point(412, 457);
+            this.btnWest.Name = "btnWest";
+            this.btnWest.Size = new System.Drawing.Size(76, 33);
+            this.btnWest.TabIndex = 16;
+            this.btnWest.Text = "West";
+            this.btnWest.UseVisualStyleBackColor = true;
+            // 
+            // rtbLocation
+            // 
+            this.rtbLocation.Location = new System.Drawing.Point(347, 19);
+            this.rtbLocation.Name = "rtbLocation";
+            this.rtbLocation.ReadOnly = true;
+            this.rtbLocation.Size = new System.Drawing.Size(360, 105);
+            this.rtbLocation.TabIndex = 17;
+            this.rtbLocation.Text = "";
+            // 
+            // rtbMessages
+            // 
+            this.rtbMessages.Location = new System.Drawing.Point(347, 130);
+            this.rtbMessages.Name = "rtbMessages";
+            this.rtbMessages.ReadOnly = true;
+            this.rtbMessages.Size = new System.Drawing.Size(360, 286);
+            this.rtbMessages.TabIndex = 18;
+            this.rtbMessages.Text = "";
+            // 
+            // dgvInventory
+            // 
+            this.dgvInventory.AllowUserToAddRows = false;
+            this.dgvInventory.AllowUserToDeleteRows = false;
+            this.dgvInventory.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvInventory.EditMode = System.Windows.Forms.DataGridViewEditMode.EditProgrammatically;
+            this.dgvInventory.Enabled = false;
+            this.dgvInventory.Location = new System.Drawing.Point(16, 130);
+            this.dgvInventory.MultiSelect = false;
+            this.dgvInventory.Name = "dgvInventory";
+            this.dgvInventory.ReadOnly = true;
+            this.dgvInventory.RowHeadersWidth = 51;
+            this.dgvInventory.RowTemplate.Height = 29;
+            this.dgvInventory.Size = new System.Drawing.Size(312, 309);
+            this.dgvInventory.TabIndex = 19;
+            // 
+            // dgvQuests
+            // 
+            this.dgvQuests.AllowUserToAddRows = false;
+            this.dgvQuests.AllowUserToDeleteRows = false;
+            this.dgvQuests.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvQuests.EditMode = System.Windows.Forms.DataGridViewEditMode.EditProgrammatically;
+            this.dgvQuests.Enabled = false;
+            this.dgvQuests.Location = new System.Drawing.Point(16, 446);
+            this.dgvQuests.MultiSelect = false;
+            this.dgvQuests.Name = "dgvQuests";
+            this.dgvQuests.ReadOnly = true;
+            this.dgvQuests.RowHeadersWidth = 51;
+            this.dgvQuests.RowTemplate.Height = 29;
+            this.dgvQuests.Size = new System.Drawing.Size(312, 189);
+            this.dgvQuests.TabIndex = 20;
             // 
             // SuperAdventure
             // 
-            this.ClientSize = new System.Drawing.Size(1102, 632);
-            this.Controls.Add(this.button2);
-            this.Controls.Add(this.button1);
+            this.ClientSize = new System.Drawing.Size(1105, 640);
+            this.Controls.Add(this.dgvQuests);
+            this.Controls.Add(this.dgvInventory);
+            this.Controls.Add(this.rtbMessages);
+            this.Controls.Add(this.rtbLocation);
+            this.Controls.Add(this.btnWest);
+            this.Controls.Add(this.btnSouth);
+            this.Controls.Add(this.btnEast);
+            this.Controls.Add(this.btnNorth);
+            this.Controls.Add(this.btnUsePotion);
+            this.Controls.Add(this.btnUseWeapon);
             this.Controls.Add(this.cboPotions);
             this.Controls.Add(this.cboWeapons);
             this.Controls.Add(this.label9);
@@ -548,23 +845,160 @@ namespace SuperAdventure
             this.Controls.Add(this.label2);
             this.Controls.Add(this.label1);
             this.Name = "SuperAdventure";
+            ((System.ComponentModel.ISupportInitialize)(this.dgvInventory)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvQuests)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
         }
 
-        private Label label1;
-        private Label label2;
-        private Label label3;
-        private Label label4;
-        private Label lblHitPoints;
-        private Label lblGold;
-        private Label lblExperience;
-        private Label lblLevel;
-        private Label label9;
-        private System.Windows.Forms.ComboBox cboWeapons;
-        private System.Windows.Forms.ComboBox cboPotions;
-        private System.Windows.Forms.Button button1;
-        private System.Windows.Forms.Button button2;
-    }
+        private void btnUseWeapon_Click(object sender, EventArgs e)
+        {
+            // Get the currently selected weapon from the cboWeapons ComboBox
+            Weapon currentWeapon = (Weapon)cboWeapons.SelectedItem;
+            // Determine the amount of damage to do to the monster
+            int damageToMonster = RandomNumberGenerator.NumberBetween(
+             currentWeapon.MinimumDamage, currentWeapon.MaximumDamage);
+            // Apply the damage to the monster's CurrentHitPoint
+            _currentMonster.CurrentHitPoints -= damageToMonster;
+            // Display message
+            rtbMessages.Text += "You hit the " + _currentMonster.Name + " for " +
+             damageToMonster.ToString() + " points." + Environment.NewLine;
+            // Check if the monster is dead
+            if (_currentMonster.CurrentHitPoints <= 0)
+            {// Monster is dead
+                rtbMessages.Text += Environment.NewLine;
+                rtbMessages.Text += "You defeated the " + _currentMonster.Name +
+                 Environment.NewLine;
+                // Give player experience points for killing the monster
+                _player.ExperiencePoints += _currentMonster.RewardExperiencePoints;
+                rtbMessages.Text += "You receive " +
+              _currentMonster.RewardExperiencePoints.ToString() +
+             " experience points" + Environment.NewLine;
+                // Give player gold for killing the monster
+                _player.Gold += _currentMonster.RewardGold;
+                rtbMessages.Text += "You receive " +
+                 _currentMonster.RewardGold.ToString() + " gold" + Environment.NewLine;
+                // Get random loot items from the monster
+                List<InventoryItem> lootedItems = new List<InventoryItem>();
+                // Add items to the lootedItems list, comparing a random number to the drop
+                //percentage
+                foreach (LootItem lootItem in _currentMonster.LootTable)
+                {
+                    if (RandomNumberGenerator.NumberBetween(1, 100) <= lootItem.DropPercentage)
+                    {
+                        lootedItems.Add(new InventoryItem(lootItem.Details, 1));
+                    }
+                }
+
+                // If no items were randomly selected, then add the default loot item(s).
+                if (lootedItems.Count == 0)
+                {
+                    foreach (LootItem lootItem in _currentMonster.LootTable)
+                    {
+                        if (lootItem.IsDefaultItem)
+                        {
+                            lootedItems.Add(new InventoryItem(lootItem.Details, 1));
+                        }
+                    }
+                }// Add the looted items to the player's inventory
+                foreach (InventoryItem inventoryItem in lootedItems)
+                {
+                    _player.AddItemToInventory(inventoryItem.Details);
+                    if (inventoryItem.Quantity == 1)
+                    {
+                        rtbMessages.Text += "You loot " +
+                     inventoryItem.Quantity.ToString() + " " +
+                     inventoryItem.Details.Name + Environment.NewLine;
+                    }
+                    else
+                    {
+                        rtbMessages.Text += "You loot " +
+                     inventoryItem.Quantity.ToString() + " " +
+                     inventoryItem.Details.NamePlural + Environment.NewLine;
+                    }
+                }// Refresh player information and inventory controls
+                lblHitPoints.Text = _player.CurrentHitPoints.ToString();
+                lblGold.Text = _player.Gold.ToString();
+                lblExperience.Text = _player.ExperiencePoints.ToString();
+                lblLevel.Text = _player.Level.ToString();
+                UpdateInventoryListInUI();
+                UpdateWeaponListInUI();
+                UpdatePotionListInUI();
+                // Add a blank line to the messages box, just for appearance.
+                rtbMessages.Text += Environment.NewLine;
+                // Move player to current location (to heal player and create a new monster
+                //to fight)
+                MoveTo(_player.CurrentLocation);
+            }
+
+            else
+            {// Monster is still alive
+             // Determine the amount of damage the monster does to the player
+                int damageToPlayer =
+                RandomNumberGenerator.NumberBetween(0, _currentMonster.MaximumDamage);
+                // Display message
+                rtbMessages.Text += "The " + _currentMonster.Name + " did " +
+                damageToPlayer.ToString() + " points of damage." + Environment.NewLine;
+                // Subtract damage from player
+                _player.CurrentHitPoints -= damageToPlayer;
+                // Refresh player data in UI
+                lblHitPoints.Text = _player.CurrentHitPoints.ToString();
+                if (_player.CurrentHitPoints <= 0)
+                {// Display message
+                    rtbMessages.Text += "The " + _currentMonster.Name + " killed you." +
+                    Environment.NewLine;
+                    // Move player to "Home"
+                    MoveTo(World.LocationByID(World.LOCATION_ID_HOME));
+                }
+            }
+
+        }
+
+        private void btnUsePotion_Click(object sender, EventArgs e)
+        {
+            // Get the currently selected potion from the combobox
+            HealingPotion potion = (HealingPotion)cboPotions.SelectedItem;
+            // Add healing amount to the player's current hit points
+            _player.CurrentHitPoints = (_player.CurrentHitPoints + potion.AmountToHeal);
+            // CurrentHitPoints cannot exceed player's MaximumHitPoints
+            if (_player.CurrentHitPoints > _player.MaximumHitPoints)
+            {
+                _player.CurrentHitPoints = _player.MaximumHitPoints;
+            }
+            // Remove the potion from the player's inventory
+            foreach (InventoryItem ii in _player.Inventory)
+            {
+                if (ii.Details.ID == potion.ID)
+                {
+                    ii.Quantity--;
+                    break;
+                }
+            }
+            // Display message
+            rtbMessages.Text += "You drink a " + potion.Name + Environment.NewLine;
+            // Monster gets their turn to attack
+            // Determine the amount of damage the monster does to the player
+            int damageToPlayer =
+            RandomNumberGenerator.NumberBetween(0, _currentMonster.MaximumDamage);
+            // Display message
+            rtbMessages.Text += "The " + _currentMonster.Name + " did " +
+            damageToPlayer.ToString() + " points of damage." + Environment.NewLine;
+            // Subtract damage from player
+            _player.CurrentHitPoints -= damageToPlayer;
+            if (_player.CurrentHitPoints <= 0)
+            {
+                // Display message
+                rtbMessages.Text += "The " + _currentMonster.Name + " killed you." +
+                Environment.NewLine;
+                // Move player to "Home"
+                MoveTo(World.LocationByID(World.LOCATION_ID_HOME));
+            }
+            // Refresh player data in UI
+            lblHitPoints.Text = _player.CurrentHitPoints.ToString();
+            UpdateInventoryListInUI();
+            UpdatePotionListInUI();
+
+        }
+    }   
 }
